@@ -8,11 +8,12 @@ export default async function Home() {
     .from('products')
     .select('*')
 
-  if (error) console.error('Supabase Error:', error)
+  if (error) {
+    console.error('Supabase Error:', error)
+  }
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
-      {/* 導航列 */}
       <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-100">
         <nav className="container mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="text-2xl font-bold tracking-widest text-black">
@@ -26,7 +27,7 @@ export default async function Home() {
         </nav>
       </header>
 
-      {/* 首頁大圖 */}
+      {/* Hero Section */}
       <section className="relative h-[60vh] bg-gray-900">
         <Image
           src="/images/螢幕擷取畫面 2026-04-27 230833.png" 
@@ -37,11 +38,10 @@ export default async function Home() {
         />
         <div className="absolute inset-0 flex flex-col items-center justify-center text-white text-center">
           <h1 className="text-5xl font-bold tracking-tight">THE ART OF SELECTION</h1>
-          <p className="mt-4 text-lg">演繹你的獨特生活美學</p>
         </div>
       </section>
 
-      {/* 商品區 */}
+      {/* 商品列表 */}
       <section className="container mx-auto px-6 py-16">
         <h2 className="text-2xl font-bold mb-10">精選單品</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
@@ -57,9 +57,8 @@ export default async function Home() {
               <div className="mt-4 flex justify-between">
                 <div>
                   <h3 className="text-sm font-medium">{product.name}</h3>
-                  <p className="text-xs text-gray-500">{product.category || 'Select'}</p>
+                  <p className="text-sm font-bold">${product.price}</p>
                 </div>
-                <p className="text-sm font-bold">${product.price}</p>
               </div>
             </div>
           ))}
