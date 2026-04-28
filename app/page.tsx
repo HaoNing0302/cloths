@@ -54,7 +54,7 @@ export default function Home() {
       {/* Hero Section */}
       <section className="relative h-[65vh] bg-gray-900">
         <Image
-          src="/images/螢幕擷取畫面 2026-04-27 230833.png" 
+          src="/images/hero-bg.jpg" 
           alt="Hero"
           fill
           className="object-cover opacity-80"
