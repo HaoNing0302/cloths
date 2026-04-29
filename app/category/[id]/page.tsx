@@ -1,27 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { useEffect, useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link'; // 🌟 引入 Link 組件
 import { supabase } from '@/lib/supabase';
-import { useCartStore } from '@/src/store/useCartStore';
-import { useUIStore } from '@/src/store/useUIStore';
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  image_url: string;
-  category: string;
-  description: string;
-}
-
-const categoryNames: Record<string, string> = {
-  '1': '上衣',
-  '2': '褲子',
-  '3': '其他',
-};
 
 export default function CategoryPage({
   params,
@@ -30,143 +13,105 @@ export default function CategoryPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ sub?: string }>;
 }) {
+  const router = useRouter();
   const resolvedParams = React.use(params);
   const resolvedSearchParams = React.use(searchParams);
-  const [products, setProducts] = useState<Product[]>([]);
+  
+  const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { addItem } = useCartStore();
-  const { openCart } = useUIStore();
 
-  const categoryName = categoryNames[resolvedParams.id] || '分類';
+  const categoryId = resolvedParams.id;
   const subCategory = resolvedSearchParams.sub;
-  const parsedSub = subCategory ? parseInt(subCategory, 10) : undefined;
+
+  const fetchProducts = useCallback(async () => {
+    const catIdNum = Number(categoryId);
+    const subCatNum = subCategory ? Number(subCategory) : null;
+
+    console.log(`[Realtime] 抓取分類 ${catIdNum} 的資料...`);
+
+    let query = supabase
+      .from('products')
+      .select('*')
+      .eq('category_id', catIdNum);
+
+    if (subCatNum) {
+      query = query.eq('subcategory', subCatNum);
+    }
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('抓取失敗:', error);
+    } else {
+      // 🌟 過濾掉沒有名稱或沒有分類的髒資料，避免空白格
+      const cleanData = (data || []).filter(p => p.name && p.category_id);
+      setProducts([...cleanData]);
+    }
+    setLoading(false);
+  }, [categoryId, subCategory]);
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      setLoading(true);
-      setError(null);
-
-      let query = supabase.from('products').select('*').eq('category_id', resolvedParams.id);
-      if (parsedSub) {
-        query = query.eq('subcategory', parsedSub);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        setError('載入商品失敗');
-        console.error(error);
-        setProducts([]);
-      } else {
-        setProducts(data as Product[]);
-      }
-
-      setLoading(false);
-    };
-
     fetchProducts();
-  }, [resolvedParams.id, parsedSub]);
 
-  const handleAddToCart = (product: Product) => {
-    addItem({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-      image_url: product.image_url,
-      size: 'M',
-    });
-    openCart();
-  };
+    const channelName = `cat-realtime-${categoryId}-${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        () => fetchProducts()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [categoryId, subCategory, fetchProducts]);
 
   return (
-    <div className="min-h-screen bg-white text-gray-900">
-      {/* Category Header */}
-      <section className="container mx-auto px-6 py-12">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900">{categoryName}</h1>
-          <p className="mt-2 text-gray-600">精選 {categoryName} 系列商品</p>
-        </div>
-      </section>
+    <div className="min-h-screen bg-white pt-24 px-6">
+      <h1 className="text-3xl font-bold mb-10 text-black">
+        {categoryId === '1' ? '上衣' : categoryId === '2' ? '褲子' : '飾品'}
+      </h1>
 
-      {/* Products Grid */}
-      <section className="container mx-auto px-6 pb-20">
-        {loading ? (
-          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="space-y-4">
-                <div className="aspect-square rounded-2xl bg-gray-200 animate-pulse" />
-                <div className="space-y-2">
-                  <div className="h-4 w-3/4 rounded-full bg-gray-200 animate-pulse" />
-                  <div className="h-4 w-1/2 rounded-full bg-gray-200 animate-pulse" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : error ? (
-          <div className="flex h-96 flex-col items-center justify-center text-center">
-            <p className="text-red-600 mb-4">{error}</p>
-            <Link href="/" className="text-sm font-medium text-gray-600 hover:text-black">
-              返回首頁
-            </Link>
-          </div>
-        ) : products.length === 0 ? (
-          <div className="flex h-96 flex-col items-center justify-center text-center">
-            <svg
-              className="h-16 w-16 text-gray-300 mb-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+      {loading ? (
+        <p className="text-gray-500 text-center py-20">載入中...</p>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+          {products.map((p) => (
+            /* 🌟 關鍵修正：使用 Link 包裹整個品項，連結到產品詳細頁 */
+            <Link 
+              key={p.id} 
+              href={`/products/${p.id}`} 
+              className="group block transition hover:-translate-y-1"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-              />
-            </svg>
-            <p className="text-lg font-semibold text-gray-900">此分類暫無商品</p>
-            <p className="mt-1 text-sm text-gray-500">敬請期待更多商品上架</p>
-            <Link href="/" className="mt-4 text-sm font-medium text-gray-600 hover:text-black">
-              返回首頁
-            </Link>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {products.map((product) => (
-              <div key={product.id} className="group">
-                <Link href={`/products/${product.id}`} className="block">
-                  <div className="aspect-square overflow-hidden rounded-2xl bg-gray-100 mb-4">
-                    <Image
-                      src={(product.image_url || '').trim() || '/images/placeholder.jpg'}
-                      alt={product.name}
-                      width={400}
-                      height={400}
-                      className="h-full w-full object-cover transition group-hover:scale-105"
-                      unoptimized
-                    />
-                  </div>
-                </Link>
-                <div className="space-y-2">
-                  <Link href={`/products/${product.id}`}>
-                    <h3 className="font-semibold text-gray-900 group-hover:text-gray-600 transition">
-                      {product.name}
-                    </h3>
-                  </Link>
-                  <p className="text-sm text-gray-600">{product.category}</p>
-                  <p className="text-lg font-semibold text-black">${product.price.toFixed(0)}</p>
-                  <button
-                    onClick={() => handleAddToCart(product)}
-                    className="w-full inline-flex items-center justify-center rounded-full bg-black py-3 text-sm font-semibold text-white transition hover:bg-gray-900"
-                  >
-                    加入購物車
-                  </button>
-                </div>
+              <div className="aspect-[5/6] overflow-hidden rounded-2xl bg-gray-100 relative">
+                <img 
+                  src={p.image_url?.trim() || 'https://via.placeholder.com/600x720'} 
+                  alt={p.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
+                />
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+              <div className="mt-4 flex justify-between items-start">
+                <div>
+                  <h3 className="text-sm font-bold text-black">{p.name}</h3>
+                  <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest">
+                    {categoryId === '1' ? 'Tops' : categoryId === '2' ? 'Pants' : 'Accessory'}
+                  </p>
+                </div>
+                <p className="text-sm font-bold text-black">NT$ {p.price}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {!loading && products.length === 0 && (
+        <div className="text-center py-20">
+          <p className="text-gray-400">此分類目前沒有商品</p>
+          <Link href="/" className="text-black underline mt-4 inline-block">返回首頁逛逛</Link>
+        </div>
+      )}
     </div>
   );
 }
